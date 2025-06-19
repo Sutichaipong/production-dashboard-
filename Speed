@@ -1,1 +1,171 @@
-index.html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Production Line Dashboard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+    h1 { text-align: center; }
+    h2.section-title { font-size: 18px; margin-top: 30px; margin-bottom: 10px; color: #333; border-bottom: 2px solid #ddd; padding-bottom: 4px; }
+    form { background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 0 8px rgba(0,0,0,0.1); max-width: 800px; margin: auto; }
+    form h3 { margin-top: 0; }
+    form label { display: block; margin-top: 10px; }
+    form input, form select { width: 100%; padding: 6px; margin-top: 4px; border-radius: 4px; border: 1px solid #ccc; }
+    button.submit-btn { background-color: #4285f4; color: white; margin-top: 15px; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; }
+    .stage-board { display: flex; flex-wrap: wrap; gap: 15px; padding: 10px; justify-content: flex-start; }
+    .stage { background: #fff; border-radius: 8px; padding: 10px; min-width: 220px; box-shadow: 0 0 10px rgba(0,0,0,0.1); flex-shrink: 0; }
+    .stage h2 { font-size: 16px; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+    .job-card { background: #e8f0fe; margin-bottom: 8px; padding: 10px; border-left: 4px solid #4285f4; border-radius: 4px; font-size: 14px; position: relative; }
+    .upload-btn { margin-top: 5px; display: block; font-size: 12px; background: #fff; color: #4285f4; border: 1px solid #ccc; padding: 4px; border-radius: 4px; text-align: center; cursor: pointer; }
+    .upload-status { font-size: 12px; color: green; margin-top: 4px; }
+    .timestamp { font-size: 11px; color: #555; margin-top: 6px; }
+    .complete-btn { margin-top: 8px; padding: 6px 12px; background-color: #34a853; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 12px; }
+    th { background: #e8f0fe; }
+  </style>
+</head>
+<body>
+  <h1>Production Line Dashboard (Prototype)</h1>
+
+  <form id="jobForm" onsubmit="handleJobForm(event)">
+    <h3>➕ เพิ่ม Job ใหม่</h3>
+    <label>รหัส Job:</label>
+    <input type="text" id="jobCode" required />
+
+    <label>วันที่และเวลาเริ่ม:</label>
+    <input type="datetime-local" id="jobTime" required />
+
+    <label>เลือกขั้นตอนเริ่มต้น:</label>
+    <select id="startStep" required></select>
+
+    <button class="submit-btn" type="submit">เพิ่ม Job</button>
+  </form>
+
+  <h2 class="section-title">🗂️ ฝ่าย Admin</h2>
+  <div class="stage-board" id="adminBoard"></div>
+
+  <h2 class="section-title">🔍 ฝ่าย Scan</h2>
+  <div class="stage-board" id="scanBoard"></div>
+
+  <h2 class="section-title">✏️ ฝ่าย Drawing</h2>
+  <div class="stage-board" id="drawingBoard"></div>
+
+  <h2 class="section-title">🏭 ฝ่าย Production</h2>
+  <div class="stage-board" id="productionBoard"></div>
+
+  <h2 class="section-title">📋 Activity Log</h2>
+  <div style="max-width:800px;margin:auto;">
+    <table id="logTable">
+      <thead><tr><th>Job</th><th>From</th><th>To</th><th>Time</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const departments = {
+      admin: ["เสนอราคา", "เปิดใบสั่งซื้อ", "เปิดใบ Job"],
+      scan: ["สแกน-เครื่องมือ 1", "สแกน-เครื่องมือ 2", "สแกน-เครื่องมือ 3"],
+      drawing: ["Drawing 3D", "Reverse Drawing", "Design Mold for Cast", "Simulation"],
+      production: ["Sand Printing", "Cleaning", "Assembly Check", "Casting", "Machining", "Inspection", "Delivery"]
+    };
+    const allSteps = Object.values(departments).flat();
+    const boards = {
+      admin: document.getElementById('adminBoard'),
+      scan: document.getElementById('scanBoard'),
+      drawing: document.getElementById('drawingBoard'),
+      production: document.getElementById('productionBoard')
+    };
+    const startSelect = document.getElementById('startStep');
+    const logTableBody = document.querySelector('#logTable tbody');
+    const logEntries = [];
+
+    // Populate dropdown
+    allSteps.forEach(step => {
+      const opt = document.createElement('option');
+      opt.value = step;
+      opt.textContent = step;
+      startSelect.appendChild(opt);
+    });
+
+    // Render stage columns
+    Object.entries(departments).forEach(([dept, steps]) => {
+      steps.forEach(step => {
+        const col = document.createElement('div');
+        col.className = 'stage';
+        col.dataset.step = step;
+        col.innerHTML = `<h2>${step}</h2>`;
+        boards[dept].appendChild(col);
+      });
+    });
+
+    function handleJobForm(e) {
+      e.preventDefault();
+      const code = document.getElementById('jobCode').value;
+      const time = document.getElementById('jobTime').value;
+      const step = startSelect.value;
+      const stageCol = document.querySelector(`.stage[data-step='${step}']`);
+      const card = document.createElement('div');
+      card.className = 'job-card';
+      card.innerHTML = `
+        Job #${code}<br>เริ่ม: ${time}
+        <label class='upload-btn'>ถ่ายหรือแนบเอกสาร
+          <input type='file' accept='image/*' capture='environment' hidden onchange='showStatus(this)'>
+        </label>
+        <div class='upload-status'></div>
+        <div class='timestamp'></div>
+        <button class='complete-btn' onclick='completeStep(this)'>Complete</button>
+        <button class='complete-btn' onclick='nextStep(this)'>Next</button>
+      `;
+      stageCol.appendChild(card);
+      e.target.reset();
+    }
+
+    function showStatus(input) {
+      const st = input.closest('.job-card').querySelector('.upload-status');
+      st.textContent = input.files.length ? `📎 แนบแล้ว: ${input.files[0].name}` : '';
+    }
+
+    function completeStep(btn) {
+      const card = btn.closest('.job-card');
+      if (!card.querySelector('.upload-status').textContent) {
+        alert('กรุณาแนบเอกสารก่อน Complete');
+        return;
+      }
+      const now = new Date().toLocaleString('th-TH');
+      card.querySelector('.timestamp').textContent = `🕒 Completed at: ${now}`;
+      logAction(card, card.closest('.stage').dataset.step, 'Completed', now);
+    }
+
+    function nextStep(btn) {
+      const card = btn.closest('.job-card');
+      const from = card.closest('.stage').dataset.step;
+      const idx = allSteps.indexOf(from);
+      if (idx < allSteps.length - 1) {
+        const to = allSteps[idx + 1];
+        document.querySelector(`.stage[data-step=\"${to}\"]`).appendChild(card);
+        const now = new Date().toLocaleString('th-TH');
+        card.querySelector('.timestamp').textContent = `🕒 Moved to ${to} at: ${now}`;
+        logAction(card, from, to, now);
+      }
+    }
+
+    function logAction(card, from, to, time) {
+      const job = card.textContent.split('\\n')[0].trim();
+      logEntries.push({ job, from, to, time });
+      updateLogTable();
+    }
+
+    function updateLogTable() {
+      logTableBody.innerHTML = '';
+      logEntries.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${e.job}</td><td>${e.from}</td><td>${e.to}</td><td>${e.time}</td>`;
+        logTableBody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>
+
